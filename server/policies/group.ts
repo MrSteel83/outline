@@ -13,16 +13,20 @@ allow(User, "createGroup", Team, (actor, team) =>
 allow(User, "listGroups", Team, (actor, team) =>
   and(
     //
-    isTeamModel(actor, team),
-    !actor.isGuest
+    /**isTeamModel(actor, team),
+    !actor.isGuest*/
+    isTeamAdmin(actor, team),
+    isTeamMutable(actor)
   )
 );
 
 allow(User, "read", Group, (actor, team) =>
   and(
     //
-    isTeamModel(actor, team),
-    !actor.isGuest
+    /**isTeamModel(actor, team),
+    !actor.isGuest*/
+    isTeamAdmin(actor, team),
+    isTeamMutable(actor)
   )
 );
 
