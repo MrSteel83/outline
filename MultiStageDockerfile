@@ -1,27 +1,30 @@
+# syntax=docker/dockerfile:1.4
+
 # --- Build Stage ---
 FROM node:20-slim AS build
 
 WORKDIR /opt/outline
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y cmake
+# Install system dependencies (nur was wirklich gebraucht wird)
+RUN apt-get update && apt-get install -y cmake && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install dependencies
+# Copy package files and install only production dependencies
 COPY package.json yarn.lock ./
 COPY patches ./patches
 ENV NODE_OPTIONS="--max-old-space-size=24000"
 RUN yarn install --no-optional --frozen-lockfile --network-timeout 1000000 && \
     yarn cache clean
 
-# Copy full source and build
+# Copy source code and build
 COPY . .
 ARG CDN_URL
 RUN yarn build
 
-# Clean dev dependencies and install production deps
-RUN rm -rf node_modules && \
-    yarn install --production=true --frozen-lockfile --network-timeout 1000000 && \
-    yarn cache clean
+# Entferne Dev-Abhängigkeiten und unnötige Dateien
+RUN rm -rf node_modules \
+    && yarn install --production=true --frozen-lockfile --network-timeout 1000000 \
+    && yarn cache clean \
+    && rm -rf /opt/outline/.git /opt/outline/test /opt/outline/docs /opt/outline/.github
 
 # --- Runtime Stage ---
 FROM node:20-slim AS runner
@@ -29,7 +32,7 @@ FROM node:20-slim AS runner
 WORKDIR /opt/outline
 ENV NODE_ENV=production
 
-# Copy built app from build stage
+# Copy only what's needed
 COPY --from=build /opt/outline/build ./build
 COPY --from=build /opt/outline/server ./server
 COPY --from=build /opt/outline/public ./public
@@ -37,7 +40,7 @@ COPY --from=build /opt/outline/.sequelizerc ./.sequelizerc
 COPY --from=build /opt/outline/node_modules ./node_modules
 COPY --from=build /opt/outline/package.json ./package.json
 
-# Optional: Healthcheck & user setup
+# Healthcheck & User Setup
 RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --gid 1001 nodejs && \
