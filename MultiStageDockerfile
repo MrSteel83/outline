@@ -1,0 +1,59 @@
+# --- Build Stage ---
+FROM node:20-slim AS build
+
+WORKDIR /opt/outline
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y cmake
+
+# Copy package files and install dependencies
+COPY package.json yarn.lock ./
+COPY patches ./patches
+ENV NODE_OPTIONS="--max-old-space-size=24000"
+RUN yarn install --no-optional --frozen-lockfile --network-timeout 1000000 && \
+    yarn cache clean
+
+# Copy full source and build
+COPY . .
+ARG CDN_URL
+RUN yarn build
+
+# Clean dev dependencies and install production deps
+RUN rm -rf node_modules && \
+    yarn install --production=true --frozen-lockfile --network-timeout 1000000 && \
+    yarn cache clean
+
+# --- Runtime Stage ---
+FROM node:20-slim AS runner
+
+WORKDIR /opt/outline
+ENV NODE_ENV=production
+
+# Copy built app from build stage
+COPY --from=build /opt/outline/build ./build
+COPY --from=build /opt/outline/server ./server
+COPY --from=build /opt/outline/public ./public
+COPY --from=build /opt/outline/.sequelizerc ./.sequelizerc
+COPY --from=build /opt/outline/node_modules ./node_modules
+COPY --from=build /opt/outline/package.json ./package.json
+
+# Optional: Healthcheck & user setup
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --gid 1001 nodejs && \
+    adduser --uid 1001 --ingroup nodejs nodejs && \
+    chown -R nodejs:nodejs /opt/outline
+
+ENV FILE_STORAGE_LOCAL_ROOT_DIR=/var/lib/outline/data
+RUN mkdir -p "$FILE_STORAGE_LOCAL_ROOT_DIR" && \
+    chown -R nodejs:nodejs "$FILE_STORAGE_LOCAL_ROOT_DIR" && \
+    chmod 1777 "$FILE_STORAGE_LOCAL_ROOT_DIR"
+
+VOLUME /var/lib/outline/data
+
+USER nodejs
+
+HEALTHCHECK --interval=1m CMD wget -qO- "http://localhost:${PORT:-3000}/_health" | grep -q "OK" || exit 1
+
+EXPOSE 3000
+CMD ["yarn", "start"]
