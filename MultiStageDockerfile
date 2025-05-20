@@ -46,7 +46,7 @@ RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 # Create a non-root user compatible with Debian and BusyBox based images
 RUN addgroup --gid 1001 nodejs && \
   adduser --uid 1001 --ingroup nodejs nodejs && \
-  chown -R nodejs:nodejs $APP_PATH/build && \
+  chown -R nodejs:nodejs /opt/outline/build && \
   mkdir -p /var/lib/outline && \
   chown -R nodejs:nodejs /var/lib/outline
 
